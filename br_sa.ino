@@ -64,7 +64,7 @@ const char *modeNames[255] = { "Black", "Red", "Dim red", "Green", "Yellow", "Bl
                                "Red night light", "Christmas (Work)", "Christmas (Work (Twinkle))", "HSV Scroll (Twinkle)", "HSV Static (Twinkle)",
                                "HSV Fade (Twinkle)", "Knight Rider", "Knight Rider (HSV Fade)", "Single Random 1 (slow)", "Single Random 1 (fast)",
                                "Full Random 1 (slow)", "Full Random 1 (fast)", "Single Random 2 (slow)", "Single Random 2 (fast)",
-                               "Full Random 2 (slow)", "Full Random 2 (fast)", "Flames", NULL
+                               "Full Random 2 (slow)", "Full Random 2 (fast)", "Flames", "Fast Scroll", "Random Wipe", "Rave", NULL
                              };
 
 struct EepromData {
@@ -122,7 +122,7 @@ void setup() {
 
   snprintf(myhostname, sizeof(myhostname), "ws2812-%08x", ESP.getChipId());
   wifi_station_set_hostname(myhostname);
-
+  delay(1000); //Used a button also used for flashing. Wait a little
   EEPROM.begin(512);
   EEPROM.get(0, eepromData);
 
@@ -141,6 +141,8 @@ void setup() {
     configuration_mode();
   } else {
     Serial.println("Entering run mode");
+    Serial.print("Pixels: ");
+    Serial.println(eepromData.pixelcount);
     run_mode();
   }
 }
@@ -408,6 +410,29 @@ void hsvFade() {
   }
 }
 
+void randomWipe() {
+  static int hue=0;
+  static unsigned long lastChange = 0;
+  unsigned long interval = 1000;
+  unsigned long transition = 10;
+  static unsigned long i = 0;
+
+  transition = interval / eepromData.pixelcount;
+  if (millis() - lastChange > transition) {
+    if (i >= eepromData.pixelcount) {
+      i = 0;
+    }
+    if (i == 0) {
+      hue = random(0, HUE_MAX);
+    }
+    pixels.SetPixelColor(i, ledHSV(hue, 1.0, 1.0, i));
+    pixels.Show();
+    i++;
+    lastChange = millis();
+  }
+  
+}
+
 boolean hsvFadeNoShow() {
   static int hue = 0;
   static unsigned long lastChange = 0;
@@ -438,10 +463,41 @@ void hsvStatic() {
   pixels.Show();
 }
 
+void rave() {
+  static int hue = 0;
+  static unsigned long lastChange = 0;
+  unsigned long interval = 100;
+
+  if (millis() - lastChange > interval) {
+    hue = random(0, HUE_MAX);
+    for (int i = 0; i < eepromData.pixelcount; i++) {
+      pixels.SetPixelColor(i, ledHSV(hue, 1.0, 1.0, i));
+    }
+    pixels.Show();
+    lastChange = millis();
+  }
+}
+
 void hsvScroll() {
   static int hue = 0;
   static unsigned long lastChange = 0;
   unsigned long interval = 50;
+
+  if (millis() - lastChange > interval) {
+    for (int i = 0; i < eepromData.pixelcount; i++) {
+      pixels.SetPixelColor(i, ledExpHSV(((i * HUE_EXP_MAX / eepromData.pixelcount) + hue) % HUE_EXP_MAX, 1.0, 1.0, i));
+    }
+    pixels.Show();
+    hue++;
+    hue %= HUE_EXP_MAX;
+    lastChange = millis();
+  }
+}
+
+void hsvFastScroll() {
+  static int hue = 0;
+  static unsigned long lastChange = 0;
+  unsigned long interval = 1;
 
   if (millis() - lastChange > interval) {
     for (int i = 0; i < eepromData.pixelcount; i++) {
@@ -1069,6 +1125,15 @@ void ledLoop() {
       break;
     case 30:
       flames();
+      break;
+    case 31:
+      hsvFastScroll();
+      break;
+    case 32:
+      randomWipe();
+      break;
+    case 33:
+      rave();
       break;
     case 255:
       // network mode - no action
